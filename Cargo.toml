@@ -1,0 +1,35 @@
+[package]
+name = "rust_pi_zero_example"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# GPIO and hardware control
+rppal = { version = "0.14", optional = true }
+# Display control
+st7789 = { version = "0.10", features = ["graphics", "image"], optional = true }
+embedded-graphics = { version = "0.7", features = ["svg"] }
+# Async runtime for networking
+tokio = { version = "1.0", features = ["full"] }
+# HTTP server framework
+warp = "0.3"
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+# Logging
+log = "0.4"
+env_logger = "0.10"
+# Error handling
+anyhow = "1.0"
+
+[features]
+default = ["simulation"]
+hardware = ["rppal", "st7789"]
+simulation = []
+
+[profile.release]
+opt-level = "z"     # Optimize for size
+lto = true          # Link-time optimization
+codegen-units = 1   # Better optimization
+panic = "abort"     # Smaller binaries
+strip = true        # Remove debug symbols

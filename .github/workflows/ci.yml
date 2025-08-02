@@ -1,0 +1,136 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, development ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust:
+          - stable
+          - beta
+          - nightly
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ matrix.rust }}
+    
+    - name: Cache dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+    
+    - name: Run tests (simulation mode)
+      run: cargo test --verbose
+    
+    - name: Run tests (hardware mode)
+      run: cargo test --verbose --features hardware --no-default-features
+
+  fmt:
+    name: Rustfmt
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt
+    - name: Enforce formatting
+      run: cargo fmt --check
+
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        components: clippy
+    - name: Linting (simulation mode)
+      run: cargo clippy -- -D warnings
+    - name: Linting (hardware mode)
+      run: cargo clippy --features hardware --no-default-features -- -D warnings
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          - x86_64-unknown-linux-gnu
+          - arm-unknown-linux-gnueabihf
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ matrix.target }}
+    
+    - name: Install cross-compilation tools
+      if: matrix.target == 'arm-unknown-linux-gnueabihf'
+      run: |
+        sudo apt-get update
+        sudo apt-get install gcc-arm-linux-gnueabihf
+    
+    - name: Build (simulation mode)
+      run: cargo build --release --target ${{ matrix.target }}
+    
+    - name: Build (hardware mode)
+      if: matrix.target == 'arm-unknown-linux-gnueabihf'
+      run: cargo build --release --target ${{ matrix.target }} --features hardware --no-default-features
+      env:
+        CARGO_TARGET_ARM_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
+    
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: rust_pi_zero_example-${{ matrix.target }}
+        path: target/${{ matrix.target }}/release/rust_pi_zero_example
+
+  security_audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
+    - name: Install cargo-audit
+      run: cargo install cargo-audit
+    - name: Run security audit
+      run: cargo audit
+
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        components: llvm-tools-preview
+    
+    - name: Install cargo-llvm-cov
+      uses: taiki-e/install-action@cargo-llvm-cov
+    
+    - name: Generate code coverage
+      run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        files: lcov.info
+        fail_ci_if_error: true

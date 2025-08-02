@@ -1,0 +1,89 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+    steps:
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Release ${{ github.ref }}
+        draft: false
+        prerelease: false
+
+  build-and-upload:
+    name: Build and Upload
+    needs: create-release
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          - x86_64-unknown-linux-gnu
+          - arm-unknown-linux-gnueabihf
+        include:
+          - target: x86_64-unknown-linux-gnu
+            name: linux-x64
+            features: ""
+          - target: arm-unknown-linux-gnueabihf
+            name: linux-arm
+            features: "--features hardware --no-default-features"
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ matrix.target }}
+    
+    - name: Install cross-compilation tools
+      if: matrix.target == 'arm-unknown-linux-gnueabihf'
+      run: |
+        sudo apt-get update
+        sudo apt-get install gcc-arm-linux-gnueabihf
+    
+    - name: Build release binary
+      run: cargo build --release --target ${{ matrix.target }} ${{ matrix.features }}
+      env:
+        CARGO_TARGET_ARM_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
+    
+    - name: Create archive
+      run: |
+        cd target/${{ matrix.target }}/release
+        tar czf rust_pi_zero_example-${{ matrix.name }}.tar.gz rust_pi_zero_example
+        mv rust_pi_zero_example-${{ matrix.name }}.tar.gz ../../../
+    
+    - name: Upload Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ needs.create-release.outputs.upload_url }}
+        asset_path: ./rust_pi_zero_example-${{ matrix.name }}.tar.gz
+        asset_name: rust_pi_zero_example-${{ matrix.name }}.tar.gz
+        asset_content_type: application/gzip
+
+  publish-crate:
+    name: Publish to crates.io
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
+    - name: Publish to crates.io
+      run: cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
