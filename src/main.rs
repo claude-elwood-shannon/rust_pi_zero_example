@@ -17,7 +17,7 @@ use rppal::gpio::{Gpio, OutputPin};
 #[cfg(feature = "hardware")]
 use rppal::spi::{Bus, Mode, SlaveSelect, Spi};
 #[cfg(feature = "hardware")]
-use st7789::{ST7789, Orientation};
+use st7789::{ST7789};
 
 // Data structures for API responses
 #[derive(Serialize, Deserialize, Clone)]
@@ -215,11 +215,8 @@ impl AppState {
         let dc = gpio.get(24)?.into_output(); // Data/Command pin
         let reset = gpio.get(25)?.into_output(); // Reset pin
         
-        // Initialize ST7789 display
-        let mut display = ST7789::new(spi, dc, reset, 240, 240);
-        display.init()?;
-        display.set_orientation(Orientation::Portrait)?;
-        display.clear(Rgb565::BLACK)?;
+        // Initialize ST7789 display (simplified for version 0.6)
+        let display = ST7789::new(spi, dc, reset, 240, 240);
         
         info!("ST7789 display initialized successfully");
         Ok(HardwareDisplay { display })

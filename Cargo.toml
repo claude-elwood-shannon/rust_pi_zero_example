@@ -7,8 +7,8 @@ edition = "2021"
 # GPIO and hardware control
 rppal = { version = "0.14", optional = true }
 # Display control
-st7789 = { version = "0.10", features = ["graphics", "image"], optional = true }
-embedded-graphics = { version = "0.7", features = ["svg"] }
+st7789 = { version = "0.6", optional = true }
+embedded-graphics = { version = "0.7" }
 # Async runtime for networking
 tokio = { version = "1.0", features = ["full"] }
 # HTTP server framework
