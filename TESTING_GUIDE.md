@@ -148,10 +148,38 @@ curl -X POST -H 'Content-Type: application/json' -d '{"state": false}' http://lo
 ## 🔧 Useful Commands
 
 ### Stop the Application
+
+**Method 1: Automated Stop Script (Recommended)**
 ```bash
-# Ctrl+C in the running terminal
-# Or from another terminal:
+# Use the dedicated stop script
+./stop_simulation.sh
+```
+
+**Method 2: Graceful shutdown**
+```bash
+# In the terminal where the application is running:
+Ctrl+C
+```
+
+**Method 3: From another terminal**
+```bash
+# Kill by process name
 pkill -f rust_pi_zero_example
+
+# Or kill by port (if you know it's using port 3030)
+sudo lsof -ti:3030 | xargs kill -9
+```
+
+**Method 4: Find and kill specific process**
+```bash
+# Find the process ID
+ps aux | grep rust_pi_zero_example
+
+# Kill using the PID (replace XXXX with actual PID)
+kill XXXX
+
+# Force kill if needed
+kill -9 XXXX
 ```
 
 ### View Detailed Logs

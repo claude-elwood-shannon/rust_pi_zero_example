@@ -37,6 +37,9 @@ cargo run
 # Or use the convenience script
 chmod +x run_simulation.sh
 ./run_simulation.sh
+
+# To stop the simulation
+./stop_simulation.sh
 ```
 
 ### 🔧 Hardware Deployment
