@@ -4,7 +4,7 @@ echo "🚀 Starting Raspberry Pi Zero Rust Application in Simulation Mode"
 echo "=================================================="
 
 # Build and run in simulation mode (default)
-cargo run
+cargo run --target x86_64-unknown-linux-gnu
 
 echo ""
 echo "📝 To test the API endpoints, try:"

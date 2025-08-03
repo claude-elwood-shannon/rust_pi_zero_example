@@ -1,5 +1,5 @@
 [target.arm-unknown-linux-gnueabihf]
 linker = "arm-linux-gnueabihf-gcc"
 
-[build]
-target = "arm-unknown-linux-gnueabihf"
+# Only use ARM target when explicitly building for hardware
+# For simulation mode, use the default host target
