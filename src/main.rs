@@ -9,6 +9,8 @@ use embedded_graphics::{
     prelude::*,
     pixelcolor::Rgb565,
     mono_font::MonoTextStyle,
+    primitives::{Circle, Rectangle, PrimitiveStyle, PrimitiveStyleBuilder},
+    draw_target::DrawTarget,
 };
 
 // Conditional imports based on features
