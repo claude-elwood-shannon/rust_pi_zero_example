@@ -195,6 +195,27 @@ cargo build --target arm-unknown-linux-gnueabihf --features hardware --no-defaul
 
 ## 🐛 Troubleshooting
 
+### Error: "Address already in use (os error 98)"
+This means port 3030 is already in use by another instance of the application.
+
+**Solution 1: Kill existing process**
+```bash
+# Find and kill the process using port 3030
+sudo lsof -ti:3030 | xargs kill -9
+
+# Or use pkill to find the specific process
+pkill -f rust_pi_zero_example
+
+# Then run the application again
+./run_simulation.sh
+```
+
+**Solution 2: Use a different port**
+```bash
+# Edit src/main.rs and change the port number in the .serve() line
+# For example, change from 3030 to 3031
+```
+
 ### Error: "failed to select a version for st7789"
 ```bash
 # Already fixed in the code, but if it appears:
@@ -210,16 +231,16 @@ sudo apt install build-essential
 xcode-select --install
 ```
 
-### Port 3030 in Use
-```bash
-# Change port in src/main.rs at .serve() line
-# Or kill process using the port:
-sudo lsof -ti:3030 | xargs kill -9
-```
-
 ### Permission Issues on Linux
 ```bash
 chmod +x run_simulation.sh
+```
+
+### Unused Import Warnings
+These warnings are harmless and don't affect functionality:
+```bash
+# To fix the warnings, run:
+cargo fix --bin "rust_pi_zero_example"
 ```
 
 ## 📱 Test from Browser

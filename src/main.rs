@@ -8,7 +8,7 @@ use warp::Filter;
 use embedded_graphics::{
     prelude::*,
     pixelcolor::Rgb565,
-    mono_font::{ascii::FONT_10X20, MonoTextStyle},
+    mono_font::MonoTextStyle,
 };
 
 // Conditional imports based on features
@@ -120,6 +120,7 @@ impl Display for HardwareDisplay {
     
     fn draw_text(&mut self, text: &str, x: u32, y: u32, color: Rgb565) -> Result<()> {
         use embedded_graphics::text::Text;
+        use embedded_graphics::mono_font::ascii::FONT_10X20;
         let text_style = MonoTextStyle::new(&FONT_10X20, color);
         Text::new(text, Point::new(x as i32, y as i32), text_style)
             .draw(&mut self.display)?;
