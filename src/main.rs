@@ -8,9 +8,6 @@ use warp::Filter;
 use embedded_graphics::{
     prelude::*,
     pixelcolor::Rgb565,
-    mono_font::MonoTextStyle,
-    primitives::{Circle, Rectangle, PrimitiveStyle, PrimitiveStyleBuilder},
-    draw_target::DrawTarget,
 };
 
 // Conditional imports based on features
@@ -110,7 +107,7 @@ trait Display {
 // Hardware display implementation
 #[cfg(feature = "hardware")]
 struct HardwareDisplay {
-    display: ST7789<Spi, OutputPin, OutputPin>,
+    display: ST7789<Spi, OutputPin>,
 }
 
 #[cfg(feature = "hardware")]
@@ -122,7 +119,7 @@ impl Display for HardwareDisplay {
     
     fn draw_text(&mut self, text: &str, x: u32, y: u32, color: Rgb565) -> Result<()> {
         use embedded_graphics::text::Text;
-        use embedded_graphics::mono_font::ascii::FONT_10X20;
+        use embedded_graphics::mono_font::{ascii::FONT_10X20, MonoTextStyle};
         let text_style = MonoTextStyle::new(&FONT_10X20, color);
         Text::new(text, Point::new(x as i32, y as i32), text_style)
             .draw(&mut self.display)?;
@@ -219,7 +216,7 @@ impl AppState {
         let reset = gpio.get(25)?.into_output(); // Reset pin
         
         // Initialize ST7789 display with proper initialization
-        let mut display = ST7789::new(spi, dc, reset, 240, 240);
+        let display = ST7789::new(spi, dc, 240, 240);
         
         // Initialize the display hardware
         // Note: In a real hardware setup, you would need a proper delay implementation
