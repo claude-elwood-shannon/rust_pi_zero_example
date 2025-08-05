@@ -198,7 +198,6 @@ impl AppState {
             }));
 
             Ok(AppState {
-                led_pin: Arc::new(Mutex::new(None)),
                 led_status: Arc::new(Mutex::new(false)),
                 sensor_data: Arc::new(Mutex::new(None)),
                 display: Arc::new(Mutex::new(display)),

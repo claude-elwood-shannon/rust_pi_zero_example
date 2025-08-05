@@ -98,7 +98,7 @@ jobs:
         CARGO_TARGET_ARM_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
     
     - name: Upload artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: rust_pi_zero_example-${{ matrix.target }}
         path: target/${{ matrix.target }}/release/rust_pi_zero_example
