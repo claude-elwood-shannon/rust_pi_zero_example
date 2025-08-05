@@ -106,25 +106,21 @@ trait Display {
     fn get_display_content(&self) -> Option<String>;
 }
 
-// Hardware display implementation
+// Hardware display implementation (disabled due to embedded-hal compatibility issues)
 #[cfg(feature = "hardware")]
 struct HardwareDisplay {
-    display: ST7789<SPIInterfaceNoCS<Spi, OutputPin>, OutputPin>,
+    // Placeholder - display functionality disabled for now
 }
 
 #[cfg(feature = "hardware")]
 impl Display for HardwareDisplay {
     fn clear(&mut self) -> Result<()> {
-        self.display.clear(Rgb565::BLACK)?;
+        // Hardware display disabled - no-op
         Ok(())
     }
     
-    fn draw_text(&mut self, text: &str, x: u32, y: u32, color: Rgb565) -> Result<()> {
-        use embedded_graphics::text::Text;
-        use embedded_graphics::mono_font::{ascii::FONT_10X20, MonoTextStyle};
-        let text_style = MonoTextStyle::new(&FONT_10X20, color);
-        Text::new(text, Point::new(x as i32, y as i32), text_style)
-            .draw(&mut self.display)?;
+    fn draw_text(&mut self, _text: &str, _x: u32, _y: u32, _color: Rgb565) -> Result<()> {
+        // Hardware display disabled - no-op
         Ok(())
     }
     
@@ -160,8 +156,7 @@ impl Display for SimulationDisplay {
 #[derive(Clone)]
 struct AppState {
     #[cfg(feature = "hardware")]
-    led_pin: Arc<Mutex<OutputPin>>,
-    #[cfg(feature = "simulation")]
+    led_pin: Arc<Mutex<Option<OutputPin>>>,
     led_status: Arc<Mutex<bool>>,
     sensor_data: Arc<Mutex<Option<SensorData>>>,
     display: Arc<Mutex<Option<Box<dyn Display + Send>>>>,
@@ -184,12 +179,13 @@ impl AppState {
                 }
             };
             
-            Ok(AppState {
-                led_pin: Arc::new(Mutex::new(led_pin)),
+            return Ok(AppState {
+                led_pin: Arc::new(Mutex::new(Some(led_pin))),
+                led_status: Arc::new(Mutex::new(false)),
                 sensor_data: Arc::new(Mutex::new(None)),
                 display: Arc::new(Mutex::new(display)),
                 start_time: Instant::now(),
-            })
+            });
         }
         
         #[cfg(feature = "simulation")]
@@ -199,38 +195,21 @@ impl AppState {
                 mock_display: MockDisplay::new(50, 15),
             }));
             
-            Ok(AppState {
+            return Ok(AppState {
                 led_status: Arc::new(Mutex::new(false)),
                 sensor_data: Arc::new(Mutex::new(None)),
                 display: Arc::new(Mutex::new(display)),
                 start_time: Instant::now(),
-            })
+            });
         }
     }
     
     #[cfg(feature = "hardware")]
-    fn init_hardware_display(gpio: &Gpio) -> Result<HardwareDisplay> {
-        // SPI configuration for ST7789
-        let spi = Spi::new(Bus::Spi0, SlaveSelect::Ss0, 8_000_000, Mode::Mode0)?;
-        
-        // GPIO pins for display control
-        let dc = gpio.get(24)?.into_output(); // Data/Command pin
-        let reset = gpio.get(25)?.into_output(); // Reset pin
-        
-        // Create SPI interface for display
-        let interface = SPIInterfaceNoCS::new(spi, dc);
-        
-        // Initialize ST7789 display with proper initialization
-        let display = ST7789::new(interface, reset, 240, 240);
-        
-        // Initialize the display hardware
-        // Note: In a real hardware setup, you would need a proper delay implementation
-        // For now, we'll skip the init call as it requires embedded-hal delay traits
-        // display.init(&mut delay).map_err(|e| anyhow::anyhow!("Display init failed: {:?}", e))?;
-        // display.set_orientation(Orientation::Portrait).map_err(|e| anyhow::anyhow!("Set orientation failed: {:?}", e))?;
-        
-        info!("ST7789 display initialized successfully");
-        Ok(HardwareDisplay { display })
+    fn init_hardware_display(_gpio: &Gpio) -> Result<HardwareDisplay> {
+        // Hardware display initialization disabled due to embedded-hal compatibility issues
+        // TODO: Fix embedded-hal version conflicts between rppal (v1.0) and st7789/display-interface-spi (v0.2)
+        warn!("Hardware display initialization disabled due to embedded-hal compatibility issues");
+        Ok(HardwareDisplay {})
     }
 }
 
@@ -323,11 +302,13 @@ async fn led_task(state: AppState) {
         
         #[cfg(feature = "hardware")]
         {
-            if let Ok(mut pin) = state.led_pin.lock() {
-                if led_on {
-                    pin.set_high();
-                } else {
-                    pin.set_low();
+            if let Ok(mut pin_opt) = state.led_pin.lock() {
+                if let Some(ref mut pin) = pin_opt.as_mut() {
+                    if led_on {
+                        pin.set_high();
+                    } else {
+                        pin.set_low();
+                    }
                 }
             }
         }
@@ -404,8 +385,8 @@ fn update_display_content(
     
     // LED status indicator
     #[cfg(feature = "hardware")]
-    let led_status = if let Ok(pin) = state.led_pin.lock() {
-        pin.is_set_high()
+    let led_status = if let Ok(pin_opt) = state.led_pin.lock() {
+        pin_opt.as_ref().map(|pin| pin.is_set_high()).unwrap_or(false)
     } else {
         false
     };
@@ -495,8 +476,8 @@ async fn get_status_handler(state: AppState) -> Result<impl warp::Reply, warp::R
     let uptime = state.start_time.elapsed().as_secs();
     
     #[cfg(feature = "hardware")]
-    let led_status = if let Ok(pin) = state.led_pin.lock() {
-        pin.is_set_high()
+    let led_status = if let Ok(pin_opt) = state.led_pin.lock() {
+        pin_opt.as_ref().map(|pin| pin.is_set_high()).unwrap_or(false)
     } else {
         false
     };
@@ -551,13 +532,21 @@ async fn control_led_handler(
 ) -> Result<impl warp::Reply, warp::Rejection> {
     #[cfg(feature = "hardware")]
     {
-        if let Ok(mut pin) = state.led_pin.lock() {
-            if led_control.state {
-                pin.set_high();
-                info!("LED turned ON via API");
+        if let Ok(mut pin_opt) = state.led_pin.lock() {
+            if let Some(ref mut pin) = pin_opt.as_mut() {
+                if led_control.state {
+                    pin.set_high();
+                    info!("LED turned ON via API");
+                } else {
+                    pin.set_low();
+                    info!("LED turned OFF via API");
+                }
             } else {
-                pin.set_low();
-                info!("LED turned OFF via API");
+                error!("No LED pin available");
+                return Ok(warp::reply::json(&serde_json::json!({
+                    "success": false,
+                    "error": "No LED pin available"
+                })));
             }
         } else {
             error!("Failed to control LED");
