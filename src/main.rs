@@ -17,6 +17,8 @@ use rppal::gpio::{Gpio, OutputPin};
 use rppal::spi::{Bus, Mode, SlaveSelect, Spi};
 #[cfg(feature = "hardware")]
 use st7789::{ST7789, Orientation};
+#[cfg(feature = "hardware")]
+use display_interface_spi::SPIInterfaceNoCS;
 
 // Data structures for API responses
 #[derive(Serialize, Deserialize, Clone)]
@@ -107,7 +109,7 @@ trait Display {
 // Hardware display implementation
 #[cfg(feature = "hardware")]
 struct HardwareDisplay {
-    display: ST7789<Spi, OutputPin>,
+    display: ST7789<SPIInterfaceNoCS<Spi, OutputPin>, OutputPin>,
 }
 
 #[cfg(feature = "hardware")]
@@ -215,8 +217,11 @@ impl AppState {
         let dc = gpio.get(24)?.into_output(); // Data/Command pin
         let reset = gpio.get(25)?.into_output(); // Reset pin
         
+        // Create SPI interface for display
+        let interface = SPIInterfaceNoCS::new(spi, dc);
+        
         // Initialize ST7789 display with proper initialization
-        let display = ST7789::new(spi, dc, 240, 240);
+        let display = ST7789::new(interface, reset, 240, 240);
         
         // Initialize the display hardware
         // Note: In a real hardware setup, you would need a proper delay implementation
@@ -299,11 +304,11 @@ async fn sensor_reading_task(state: AppState) {
             *data = Some(sensor_data.clone());
         }
         
-        info!("Sensor reading: {:.1}°C, {:.1}% humidity", temperature, humidity);
+        info!("Sensor reading: {temperature:.1}°C, {humidity:.1}% humidity");
         
         // Log warning if temperature is too high
         if temperature > 30.0 {
-            warn!("High temperature detected: {:.1}°C", temperature);
+            warn!("High temperature detected: {temperature:.1}°C");
         }
     }
 }
@@ -356,7 +361,7 @@ async fn display_update_task(state: AppState) {
         if let Ok(mut display_opt) = state.display.lock() {
             if let Some(ref mut display) = display_opt.as_mut() {
                 if let Err(e) = update_display_content(display.as_mut(), &sensor_data, &state) {
-                    error!("Failed to update display: {}", e);
+                    error!("Failed to update display: {e}");
                 }
             }
         }
@@ -394,7 +399,7 @@ fn update_display_content(
     
     // Display uptime
     let uptime = state.start_time.elapsed().as_secs();
-    let uptime_text = format!("Uptime: {}s", uptime);
+    let uptime_text = format!("Uptime: {uptime}s");
     display.draw_text(&uptime_text, 10, 180, Rgb565::WHITE)?;
     
     // LED status indicator
@@ -420,7 +425,7 @@ fn update_display_content(
     {
         if let Some(content) = display.get_display_content() {
             println!("\n🖥️  LCD Display Content:");
-            println!("{}", content);
+            println!("{content}");
             println!("📊 Status: LED={}, Temp={:.1}°C", 
                 if led_status { "ON" } else { "OFF" },
                 sensor_data.as_ref().map(|d| d.temperature).unwrap_or(0.0)
@@ -521,7 +526,7 @@ async fn get_status_handler(state: AppState) -> Result<impl warp::Reply, warp::R
         last_sensor_reading,
         display_content,
     };
-    
+
     Ok(warp::reply::json(&status))
 }
 
@@ -562,7 +567,7 @@ async fn control_led_handler(
             })));
         }
     }
-    
+
     #[cfg(feature = "simulation")]
     {
         if let Ok(mut status) = state.led_status.lock() {
@@ -570,7 +575,7 @@ async fn control_led_handler(
             info!("LED turned {} via API (simulation)", if led_control.state { "ON" } else { "OFF" });
         }
     }
-    
+
     Ok(warp::reply::json(&serde_json::json!({
         "success": true,
         "led_state": led_control.state
