@@ -9,13 +9,7 @@ use warp::Filter;
 
 // Conditional imports based on features
 #[cfg(feature = "hardware")]
-use display_interface_spi::SPIInterfaceNoCS;
-#[cfg(feature = "hardware")]
 use rppal::gpio::{Gpio, OutputPin};
-#[cfg(feature = "hardware")]
-use rppal::spi::{Bus, Mode, SlaveSelect, Spi};
-#[cfg(feature = "hardware")]
-use st7789::{Orientation, ST7789};
 
 // Data structures for API responses
 #[derive(Serialize, Deserialize, Clone)]
@@ -181,13 +175,13 @@ impl AppState {
                 }
             };
 
-            return Ok(AppState {
+            Ok(AppState {
                 led_pin: Arc::new(Mutex::new(Some(led_pin))),
                 led_status: Arc::new(Mutex::new(false)),
                 sensor_data: Arc::new(Mutex::new(None)),
                 display: Arc::new(Mutex::new(display)),
                 start_time: Instant::now(),
-            });
+            })
         }
 
         #[cfg(feature = "simulation")]
@@ -634,4 +628,160 @@ fn simulate_humidity_reading() -> f32 {
     let random_value = (hasher.finish() % 1000) as f32 / 1000.0;
 
     40.0 + (random_value * 40.0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_simulate_temperature_reading() {
+        let temp = simulate_temperature_reading();
+        assert!(temp >= 20.0 && temp <= 35.0, "Temperature should be between 20-35°C");
+    }
+
+    #[test]
+    fn test_simulate_humidity_reading() {
+        let humidity = simulate_humidity_reading();
+        assert!(humidity >= 40.0 && humidity <= 80.0, "Humidity should be between 40-80%");
+    }
+
+    #[test]
+    fn test_sensor_data_creation() {
+        let sensor_data = SensorData {
+            temperature: 25.0,
+            humidity: 60.0,
+            timestamp: 1234567890,
+        };
+        
+        assert_eq!(sensor_data.temperature, 25.0);
+        assert_eq!(sensor_data.humidity, 60.0);
+        assert_eq!(sensor_data.timestamp, 1234567890);
+    }
+
+    #[test]
+    fn test_led_control_serialization() {
+        let led_control = LedControl { state: true };
+        let json = serde_json::to_string(&led_control).unwrap();
+        assert!(json.contains("true"));
+        
+        let led_control_off = LedControl { state: false };
+        let json_off = serde_json::to_string(&led_control_off).unwrap();
+        assert!(json_off.contains("false"));
+    }
+
+    #[cfg(feature = "simulation")]
+    #[test]
+    fn test_mock_display_creation() {
+        let mut display = MockDisplay::new(20, 10);
+        display.clear();
+        let content = display.get_content();
+        
+        // Should contain border characters
+        assert!(content.contains("╔"));
+        assert!(content.contains("╗"));
+        assert!(content.contains("╚"));
+        assert!(content.contains("╝"));
+    }
+
+    #[cfg(feature = "simulation")]
+    #[test]
+    fn test_mock_display_add_text() {
+        let mut display = MockDisplay::new(20, 10);
+        display.clear();
+        display.add_text("Hello", 2, 2);
+        let content = display.get_content();
+        
+        assert!(content.contains("Hello"));
+    }
+
+    #[cfg(feature = "simulation")]
+    #[test]
+    fn test_simulation_display_trait() {
+        let mut sim_display = SimulationDisplay {
+            mock_display: MockDisplay::new(30, 8),
+        };
+        
+        // Test clear
+        assert!(sim_display.clear().is_ok());
+        
+        // Test draw_text
+        assert!(sim_display.draw_text("Test", 10, 20, Rgb565::WHITE).is_ok());
+        
+        // Test get_display_content
+        let content = sim_display.get_display_content();
+        assert!(content.is_some());
+        assert!(content.unwrap().contains("Test"));
+    }
+
+    #[test]
+    fn test_system_status_creation() {
+        let sensor_data = SensorData {
+            temperature: 22.5,
+            humidity: 55.0,
+            timestamp: 1640995200,
+        };
+        
+        let status = SystemStatus {
+            uptime_seconds: 3600,
+            led_status: true,
+            last_sensor_reading: Some(sensor_data.clone()),
+            display_content: Some("Test display".to_string()),
+        };
+        
+        assert_eq!(status.uptime_seconds, 3600);
+        assert_eq!(status.led_status, true);
+        assert!(status.last_sensor_reading.is_some());
+        assert!(status.display_content.is_some());
+    }
+
+    #[test]
+    fn test_sensor_data_serialization() {
+        let sensor_data = SensorData {
+            temperature: 23.5,
+            humidity: 65.0,
+            timestamp: 1640995200,
+        };
+        
+        let json = serde_json::to_string(&sensor_data).unwrap();
+        assert!(json.contains("23.5"));
+        assert!(json.contains("65.0"));
+        assert!(json.contains("1640995200"));
+        
+        // Test deserialization
+        let deserialized: SensorData = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.temperature, 23.5);
+        assert_eq!(deserialized.humidity, 65.0);
+        assert_eq!(deserialized.timestamp, 1640995200);
+    }
+
+    #[cfg(feature = "simulation")]
+    #[test]
+    fn test_app_state_creation_simulation() {
+        let app_state = AppState::new();
+        assert!(app_state.is_ok());
+        
+        let state = app_state.unwrap();
+        assert!(state.sensor_data.lock().is_ok());
+        assert!(state.led_status.lock().is_ok());
+        assert!(state.display.lock().is_ok());
+    }
+
+    #[test]
+    fn test_temperature_range_consistency() {
+        // Test multiple readings to ensure they're in range
+        for _ in 0..10 {
+            let temp = simulate_temperature_reading();
+            assert!(temp >= 20.0 && temp <= 35.0, "Temperature {temp} out of range");
+        }
+    }
+
+    #[test]
+    fn test_humidity_range_consistency() {
+        // Test multiple readings to ensure they're in range
+        for _ in 0..10 {
+            let humidity = simulate_humidity_reading();
+            assert!(humidity >= 40.0 && humidity <= 80.0, "Humidity {humidity} out of range");
+        }
+    }
 }
