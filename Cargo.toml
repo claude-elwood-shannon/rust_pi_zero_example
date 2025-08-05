@@ -10,6 +10,8 @@ rppal = { version = "0.14", optional = true }
 st7789 = { version = "0.6", optional = true }
 display-interface-spi = { version = "0.4", optional = true }
 embedded-graphics = { version = "0.7" }
+# Use embedded-hal v0.2 for compatibility with st7789 and rppal
+embedded-hal = { version = "0.2", optional = true }
 # Async runtime for networking
 tokio = { version = "1.0", features = ["full"] }
 # HTTP server framework
@@ -25,7 +27,7 @@ anyhow = "1.0"
 
 [features]
 default = ["simulation"]
-hardware = ["rppal", "st7789", "display-interface-spi"]
+hardware = ["rppal", "st7789", "display-interface-spi", "embedded-hal"]
 simulation = []
 
 [profile.release]

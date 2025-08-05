@@ -1,24 +1,21 @@
 use anyhow::Result;
-use log::{info, warn, error};
+use embedded_graphics::{pixelcolor::Rgb565, prelude::*};
+use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tokio::time;
 use warp::Filter;
-use embedded_graphics::{
-    prelude::*,
-    pixelcolor::Rgb565,
-};
 
 // Conditional imports based on features
+#[cfg(feature = "hardware")]
+use display_interface_spi::SPIInterfaceNoCS;
 #[cfg(feature = "hardware")]
 use rppal::gpio::{Gpio, OutputPin};
 #[cfg(feature = "hardware")]
 use rppal::spi::{Bus, Mode, SlaveSelect, Spi};
 #[cfg(feature = "hardware")]
-use st7789::{ST7789, Orientation};
-#[cfg(feature = "hardware")]
-use display_interface_spi::SPIInterfaceNoCS;
+use st7789::{Orientation, ST7789};
 
 // Data structures for API responses
 #[derive(Serialize, Deserialize, Clone)]
@@ -58,29 +55,33 @@ impl MockDisplay {
             height,
         }
     }
-    
+
     fn clear(&mut self) {
         self.content.clear();
-        self.content.push_str(&format!("╔{}╗\n", "═".repeat(self.width as usize - 2)));
+        self.content
+            .push_str(&format!("╔{}╗\n", "═".repeat(self.width as usize - 2)));
         for _ in 0..(self.height - 2) {
-            self.content.push_str(&format!("║{}║\n", " ".repeat(self.width as usize - 2)));
+            self.content
+                .push_str(&format!("║{}║\n", " ".repeat(self.width as usize - 2)));
         }
-        self.content.push_str(&format!("╚{}╝\n", "═".repeat(self.width as usize - 2)));
+        self.content
+            .push_str(&format!("╚{}╝\n", "═".repeat(self.width as usize - 2)));
     }
-    
+
     fn add_text(&mut self, text: &str, x: u32, y: u32) {
         // Simple text positioning simulation
         let lines: Vec<&str> = self.content.lines().collect();
         let mut new_content = String::new();
-        
+
         for (i, line) in lines.iter().enumerate() {
             if i == y as usize && y < self.height {
                 let mut chars: Vec<char> = line.chars().collect();
                 let start_pos = (x + 1) as usize; // Account for border
-                
+
                 if start_pos < chars.len() {
                     for (j, ch) in text.chars().enumerate() {
-                        if start_pos + j < chars.len() - 1 { // Don't overwrite right border
+                        if start_pos + j < chars.len() - 1 {
+                            // Don't overwrite right border
                             chars[start_pos + j] = ch;
                         }
                     }
@@ -93,7 +94,7 @@ impl MockDisplay {
         }
         self.content = new_content;
     }
-    
+
     fn get_content(&self) -> &str {
         &self.content
     }
@@ -118,12 +119,12 @@ impl Display for HardwareDisplay {
         // Hardware display disabled - no-op
         Ok(())
     }
-    
+
     fn draw_text(&mut self, _text: &str, _x: u32, _y: u32, _color: Rgb565) -> Result<()> {
         // Hardware display disabled - no-op
         Ok(())
     }
-    
+
     fn get_display_content(&self) -> Option<String> {
         None // Hardware display doesn't provide content string
     }
@@ -141,12 +142,12 @@ impl Display for SimulationDisplay {
         self.mock_display.clear();
         Ok(())
     }
-    
+
     fn draw_text(&mut self, text: &str, x: u32, y: u32, _color: Rgb565) -> Result<()> {
         self.mock_display.add_text(text, x / 10, y / 20); // Scale down coordinates
         Ok(())
     }
-    
+
     fn get_display_content(&self) -> Option<String> {
         Some(self.mock_display.get_content().to_string())
     }
@@ -169,16 +170,17 @@ impl AppState {
         {
             let gpio = Gpio::new()?;
             let led_pin = gpio.get(18)?.into_output();
-            
+
             // Initialize display hardware
-            let display: Option<Box<dyn Display + Send>> = match Self::init_hardware_display(&gpio) {
+            let display: Option<Box<dyn Display + Send>> = match Self::init_hardware_display(&gpio)
+            {
                 Ok(disp) => Some(Box::new(disp)),
                 Err(e) => {
                     warn!("Failed to initialize hardware display: {}", e);
                     None
                 }
             };
-            
+
             return Ok(AppState {
                 led_pin: Arc::new(Mutex::new(Some(led_pin))),
                 led_status: Arc::new(Mutex::new(false)),
@@ -187,23 +189,24 @@ impl AppState {
                 start_time: Instant::now(),
             });
         }
-        
+
         #[cfg(feature = "simulation")]
         {
             info!("Running in simulation mode");
             let display: Option<Box<dyn Display + Send>> = Some(Box::new(SimulationDisplay {
                 mock_display: MockDisplay::new(50, 15),
             }));
-            
-            return Ok(AppState {
+
+            Ok(AppState {
+                led_pin: Arc::new(Mutex::new(None)),
                 led_status: Arc::new(Mutex::new(false)),
                 sensor_data: Arc::new(Mutex::new(None)),
                 display: Arc::new(Mutex::new(display)),
                 start_time: Instant::now(),
-            });
+            })
         }
     }
-    
+
     #[cfg(feature = "hardware")]
     fn init_hardware_display(_gpio: &Gpio) -> Result<HardwareDisplay> {
         // Hardware display initialization disabled due to embedded-hal compatibility issues
@@ -217,10 +220,10 @@ impl AppState {
 async fn main() -> Result<()> {
     // Initialize logging
     env_logger::init();
-    
+
     #[cfg(feature = "hardware")]
     info!("Starting Raspberry Pi Zero Rust application (Hardware Mode)");
-    
+
     #[cfg(feature = "simulation")]
     info!("Starting Raspberry Pi Zero Rust application (Simulation Mode)");
 
@@ -251,9 +254,7 @@ async fn main() -> Result<()> {
     let routes = setup_routes(api_state);
 
     info!("Starting web server on port 3030");
-    warp::serve(routes)
-        .run(([0, 0, 0, 0], 3030))
-        .await;
+    warp::serve(routes).run(([0, 0, 0, 0], 3030)).await;
 
     Ok(())
 }
@@ -261,14 +262,14 @@ async fn main() -> Result<()> {
 // Simulated sensor reading task
 async fn sensor_reading_task(state: AppState) {
     let mut interval = time::interval(Duration::from_secs(5));
-    
+
     loop {
         interval.tick().await;
-        
+
         // Simulate reading temperature and humidity sensors
         let temperature = simulate_temperature_reading();
         let humidity = simulate_humidity_reading();
-        
+
         let sensor_data = SensorData {
             temperature,
             humidity,
@@ -277,14 +278,14 @@ async fn sensor_reading_task(state: AppState) {
                 .unwrap()
                 .as_secs(),
         };
-        
+
         // Update shared state
         if let Ok(mut data) = state.sensor_data.lock() {
             *data = Some(sensor_data.clone());
         }
-        
+
         info!("Sensor reading: {temperature:.1}°C, {humidity:.1}% humidity");
-        
+
         // Log warning if temperature is too high
         if temperature > 30.0 {
             warn!("High temperature detected: {temperature:.1}°C");
@@ -296,10 +297,10 @@ async fn sensor_reading_task(state: AppState) {
 async fn led_task(state: AppState) {
     let mut interval = time::interval(Duration::from_millis(1000));
     let mut led_on = false;
-    
+
     loop {
         interval.tick().await;
-        
+
         #[cfg(feature = "hardware")]
         {
             if let Ok(mut pin_opt) = state.led_pin.lock() {
@@ -312,14 +313,14 @@ async fn led_task(state: AppState) {
                 }
             }
         }
-        
+
         #[cfg(feature = "simulation")]
         {
             if let Ok(mut status) = state.led_status.lock() {
                 *status = led_on;
             }
         }
-        
+
         led_on = !led_on;
     }
 }
@@ -327,17 +328,17 @@ async fn led_task(state: AppState) {
 // Display update task
 async fn display_update_task(state: AppState) {
     let mut interval = time::interval(Duration::from_secs(2));
-    
+
     loop {
         interval.tick().await;
-        
+
         // Get current sensor data
         let sensor_data = if let Ok(data) = state.sensor_data.lock() {
             data.clone()
         } else {
             None
         };
-        
+
         // Update display if available
         if let Ok(mut display_opt) = state.display.lock() {
             if let Some(ref mut display) = display_opt.as_mut() {
@@ -357,19 +358,19 @@ fn update_display_content(
 ) -> Result<()> {
     // Clear display
     display.clear()?;
-    
+
     // Display title
     display.draw_text("Hello World!", 10, 30, Rgb565::WHITE)?;
     display.draw_text("Pi Zero Monitor", 10, 60, Rgb565::WHITE)?;
-    
+
     // Display sensor data if available
     if let Some(data) = sensor_data {
         let temp_text = format!("Temp: {:.1}C", data.temperature);
         display.draw_text(&temp_text, 10, 90, Rgb565::WHITE)?;
-        
+
         let humidity_text = format!("Humidity: {:.1}%", data.humidity);
         display.draw_text(&humidity_text, 10, 120, Rgb565::WHITE)?;
-        
+
         // Color-coded temperature warning
         if data.temperature > 30.0 {
             display.draw_text("HIGH TEMP!", 10, 150, Rgb565::RED)?;
@@ -377,43 +378,51 @@ fn update_display_content(
     } else {
         display.draw_text("No sensor data", 10, 90, Rgb565::WHITE)?;
     }
-    
+
     // Display uptime
     let uptime = state.start_time.elapsed().as_secs();
     let uptime_text = format!("Uptime: {uptime}s");
     display.draw_text(&uptime_text, 10, 180, Rgb565::WHITE)?;
-    
+
     // LED status indicator
     #[cfg(feature = "hardware")]
     let led_status = if let Ok(pin_opt) = state.led_pin.lock() {
-        pin_opt.as_ref().map(|pin| pin.is_set_high()).unwrap_or(false)
+        pin_opt
+            .as_ref()
+            .map(|pin| pin.is_set_high())
+            .unwrap_or(false)
     } else {
         false
     };
-    
+
     #[cfg(feature = "simulation")]
     let led_status = if let Ok(status) = state.led_status.lock() {
         *status
     } else {
         false
     };
-    
-    let led_color = if led_status { Rgb565::GREEN } else { Rgb565::RED };
+
+    let led_color = if led_status {
+        Rgb565::GREEN
+    } else {
+        Rgb565::RED
+    };
     display.draw_text("LED", 10, 210, led_color)?;
-    
+
     // Print to console in simulation mode
     #[cfg(feature = "simulation")]
     {
         if let Some(content) = display.get_display_content() {
             println!("\n🖥️  LCD Display Content:");
             println!("{content}");
-            println!("📊 Status: LED={}, Temp={:.1}°C", 
+            println!(
+                "📊 Status: LED={}, Temp={:.1}°C",
                 if led_status { "ON" } else { "OFF" },
                 sensor_data.as_ref().map(|d| d.temperature).unwrap_or(0.0)
             );
         }
     }
-    
+
     Ok(())
 }
 
@@ -474,33 +483,36 @@ fn with_state(
 // API Handlers
 async fn get_status_handler(state: AppState) -> Result<impl warp::Reply, warp::Rejection> {
     let uptime = state.start_time.elapsed().as_secs();
-    
+
     #[cfg(feature = "hardware")]
     let led_status = if let Ok(pin_opt) = state.led_pin.lock() {
-        pin_opt.as_ref().map(|pin| pin.is_set_high()).unwrap_or(false)
+        pin_opt
+            .as_ref()
+            .map(|pin| pin.is_set_high())
+            .unwrap_or(false)
     } else {
         false
     };
-    
+
     #[cfg(feature = "simulation")]
     let led_status = if let Ok(status) = state.led_status.lock() {
         *status
     } else {
         false
     };
-    
+
     let last_sensor_reading = if let Ok(data) = state.sensor_data.lock() {
         data.clone()
     } else {
         None
     };
-    
+
     let display_content = if let Ok(display_opt) = state.display.lock() {
         display_opt.as_ref().and_then(|d| d.get_display_content())
     } else {
         None
     };
-    
+
     let status = SystemStatus {
         uptime_seconds: uptime,
         led_status,
@@ -517,7 +529,7 @@ async fn get_sensor_handler(state: AppState) -> Result<impl warp::Reply, warp::R
     } else {
         None
     };
-    
+
     match sensor_data {
         Some(data) => Ok(warp::reply::json(&data)),
         None => Ok(warp::reply::json(&serde_json::json!({
@@ -561,7 +573,10 @@ async fn control_led_handler(
     {
         if let Ok(mut status) = state.led_status.lock() {
             *status = led_control.state;
-            info!("LED turned {} via API (simulation)", if led_control.state { "ON" } else { "OFF" });
+            info!(
+                "LED turned {} via API (simulation)",
+                if led_control.state { "ON" } else { "OFF" }
+            );
         }
     }
 
@@ -577,7 +592,7 @@ async fn get_display_handler(state: AppState) -> Result<impl warp::Reply, warp::
     } else {
         None
     };
-    
+
     match display_content {
         Some(content) => Ok(warp::reply::json(&serde_json::json!({
             "display_content": content,
@@ -596,11 +611,11 @@ fn simulate_temperature_reading() -> f32 {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
     use std::time::SystemTime;
-    
+
     let mut hasher = DefaultHasher::new();
     SystemTime::now().hash(&mut hasher);
     let random_value = (hasher.finish() % 1000) as f32 / 1000.0;
-    
+
     20.0 + (random_value * 15.0)
 }
 
@@ -609,10 +624,15 @@ fn simulate_humidity_reading() -> f32 {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
     use std::time::SystemTime;
-    
+
     let mut hasher = DefaultHasher::new();
-    (SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos() + 12345).hash(&mut hasher);
+    (SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos()
+        + 12345)
+        .hash(&mut hasher);
     let random_value = (hasher.finish() % 1000) as f32 / 1000.0;
-    
+
     40.0 + (random_value * 40.0)
 }
